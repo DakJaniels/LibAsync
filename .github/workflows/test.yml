@@ -358,11 +358,15 @@ jobs:
                   Get-ChildItem -Path "esoui" -Directory | Select-Object -First 10 | ForEach-Object { Write-Host "    $($_.Name)" }
               }
               
-              Write-Host "Running ESOLua from working directory with ESOUI source path..."
-              # Use absolute path for -s flag, and ensure we're in the right directory
+              Write-Host "Running ESOLua from working directory..."
+              # Change to working directory - ESOLua should find esoui/ automatically
               Push-Location $workingDir
               try {
-                  & $esoluaExe -s $esouiPath $runTestsPath 2>&1
+                  Write-Host "Current directory: $(Get-Location)"
+                  Write-Host "Checking if esoui exists in current directory: $(Test-Path 'esoui')"
+                  # Try without -s flag first - ESOLua should auto-detect esoui/ in current directory
+                  Write-Host "Running: esolua.exe run_tests.lua (ESOLua should auto-detect esoui/)"
+                  & $esoluaExe run_tests.lua 2>&1
                   $exitCode = $LASTEXITCODE
               } finally {
                   Pop-Location
