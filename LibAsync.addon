@@ -13,5 +13,6 @@
 ## All rights reserved.
 
 LibAsync.lua
+
 ; Test files (only loaded when Taneth is available)
 tests/LibAsync_test.lua
