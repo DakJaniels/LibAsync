@@ -101,39 +101,39 @@ jobs:
           }
           
           # Fix ESOUI directory structure for ESOLua
-          # Git clone creates esoui/esoui/ (two levels), but we flattened it incorrectly
-          # ESOLua expects esoui/ with both ingame/ and esoui/ subdirectories
-          # Current state: esoui/ has ingame/ but missing esoui/esoui/
-          # Need to check if we have esoui/esoui/esoui/ (three levels) and fix it
+          # ESOLua requires BOTH esoui/ingame/ AND esoui/esoui/
+          # Git clone creates esoui/esoui/ with ingame/ inside
+          # We need: esoui/ingame/ (source) AND esoui/esoui/ingame/ (also source)
           
-          if (Test-Path "esoui\esoui\esoui") {
-            Write-Host "Detected three-level nesting (esoui/esoui/esoui/), restructuring..."
-            # Move third level contents up to second level
-            $thirdLevel = "esoui\esoui\esoui"
-            $secondLevel = "esoui\esoui"
-            
-            # Copy contents from third level to second level
-            Get-ChildItem -Path $thirdLevel -Force | ForEach-Object {
-              $dest = Join-Path $secondLevel $_.Name
+          # Check if ingame exists in esoui/esoui/ but not in esoui/
+          if ((Test-Path "esoui\esoui\ingame") -and -not (Test-Path "esoui\ingame")) {
+            Write-Host "Copying ingame/ from esoui/esoui/ to esoui/ for ESOLua..."
+            Copy-Item -Path "esoui\esoui\ingame" -Destination "esoui\ingame" -Recurse -Force
+          }
+          
+          # Copy ALL source directories from esoui/esoui/ to esoui/ level
+          if (Test-Path "esoui\esoui") {
+            Write-Host "Copying all ESOUI source directories from esoui/esoui/ to esoui/..."
+            Get-ChildItem -Path "esoui\esoui" -Directory | Where-Object { $_.Name -ne "esoui" } | ForEach-Object {
+              $dest = Join-Path "esoui" $_.Name
               if (-not (Test-Path $dest)) {
+                Write-Host "  Copying esoui/esoui/$($_.Name) to esoui/$($_.Name)"
                 Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force
               }
             }
-            Write-Host "Restructured from esoui/esoui/esoui/ to esoui/esoui/"
+            Write-Host "All ESOUI source directories copied to root level"
           }
           
-          # Ensure esoui/esoui/ exists (ESOLua requires it)
-          if (-not (Test-Path "esoui\esoui")) {
-            Write-Host "Creating missing esoui/esoui/ directory for ESOLua..."
-            New-Item -ItemType Directory -Path "esoui\esoui" -Force | Out-Null
-            
-            # Copy all source directories from esoui/ to esoui/esoui/ (except esoui itself)
-            Get-ChildItem -Path "esoui" -Directory | Where-Object { $_.Name -ne "esoui" } | ForEach-Object {
+          # Also handle three-level nesting if it exists
+          if (Test-Path "esoui\esoui\esoui") {
+            Write-Host "Flattening three-level nesting..."
+            Get-ChildItem -Path "esoui\esoui\esoui" -Force | ForEach-Object {
               $dest = Join-Path "esoui\esoui" $_.Name
-              Write-Host "  Copying esoui/$($_.Name) to esoui/esoui/$($_.Name)"
-              Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force
+              if (-not (Test-Path $dest)) {
+                Move-Item -Path $_.FullName -Destination $dest -Force
+              }
             }
-            Write-Host "Created esoui/esoui/ structure"
+            Remove-Item -Path "esoui\esoui\esoui" -Recurse -Force -ErrorAction SilentlyContinue
           }
           
           # Verify ESOLua can find the structure it needs
