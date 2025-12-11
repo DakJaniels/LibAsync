@@ -94,7 +94,11 @@ jobs:
           # Copy LibAsync files
           Copy-Item -Path "LibAsync.lua" -Destination "$addonsDir\LibAsync\" -Force
           Copy-Item -Path "LibAsync.addon" -Destination "$addonsDir\LibAsync\" -Force
-          Copy-Item -Path "tests\*" -Destination "$addonsDir\LibAsync\tests\" -Recurse -Force
+          
+          # Copy test files
+          if (Test-Path "tests") {
+              Copy-Item -Path "tests" -Destination "$addonsDir\LibAsync\" -Recurse -Force
+          }
           
           # Copy ESOUI source for API definitions
           if (Test-Path "esoui\esoui") {
