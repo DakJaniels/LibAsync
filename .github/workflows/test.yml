@@ -47,18 +47,6 @@ jobs:
             }
           }
       
-      - name: Setup Lua (Optional Fallback)
-        continue-on-error: true
-        run: |
-          # Try to install Lua 5.1 via Chocolatey as optional fallback
-          # ESOLua is the primary runtime, so this is only needed if ESOLua fails
-          if (Get-Command choco -ErrorAction SilentlyContinue) {
-            Write-Host "Attempting to install Lua 5.1 via Chocolatey (optional fallback)..."
-            choco install lua -y 2>&1 | Write-Host
-          } else {
-            Write-Host "Chocolatey not available, will use ESOLua or check for existing Lua installation"
-          }
-      
       - name: Setup ESOLua
         run: |
           # Download pre-built ESOLua from ESOUI
@@ -232,7 +220,7 @@ jobs:
           
           $runnerScript | Out-File -FilePath "run_tests.lua" -Encoding utf8
       
-      - name: Find and Run Tests
+      - name: Run Tests with ESOLua
         run: |
           # Find ESOLua executable
           $esoluaExe = $null
@@ -244,32 +232,15 @@ jobs:
               }
           }
           
-          if ($esoluaExe) {
-              Write-Host "Running tests with ESOLua..."
-              & $esoluaExe run_tests.lua
-              if ($LASTEXITCODE -ne 0) {
-                  Write-Host "Tests failed with exit code: $LASTEXITCODE"
-                  exit $LASTEXITCODE
-              }
-          } else {
-              Write-Host "ESOLua not found, trying system Lua 5.1..."
-              # Try common Lua 5.1 installations
-              $luaCmds = @("lua5.1", "lua", "lua51")
-              $found = $false
-              foreach ($cmd in $luaCmds) {
-                  if (Get-Command $cmd -ErrorAction SilentlyContinue) {
-                      Write-Host "Running tests with: $cmd"
-                      & $cmd run_tests.lua
-                      $found = $true
-                      if ($LASTEXITCODE -ne 0) {
-                          exit $LASTEXITCODE
-                      }
-                      break
-                  }
-              }
-              if (-not $found) {
-                  Write-Host "ERROR: No Lua interpreter found."
-                  Write-Host "Please ensure ESOLua is downloaded or Lua 5.1 is installed"
-                  exit 1
-              }
+          if (-not $esoluaExe) {
+              Write-Host "ERROR: ESOLua executable not found!"
+              Write-Host "Please ensure ESOLua was downloaded successfully in the Setup ESOLua step"
+              exit 1
+          }
+          
+          Write-Host "Running tests with ESOLua..."
+          & $esoluaExe run_tests.lua
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "Tests failed with exit code: $LASTEXITCODE"
+              exit $LASTEXITCODE
           }
