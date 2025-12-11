@@ -219,6 +219,11 @@ jobs:
           _G.SLASH_COMMANDS = {}
           _G.EventManager = GetEventManager()
           _G.em = GetEventManager()
+          _G.EVENT_MANAGER = EventManager  -- Taneth uses this global
+          
+          -- Add other globals that Taneth might need
+          _G.GetString = function(id) return tostring(id) end
+          _G.SI_APPLY = 1  -- Mock string ID constant
           
           -- Load Taneth in manifest order:
           -- 1. StartUp.lua
