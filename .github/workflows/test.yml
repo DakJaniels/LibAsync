@@ -101,37 +101,52 @@ jobs:
           }
           
           # Fix ESOUI directory structure for ESOLua
-          # Git clone creates esoui/esoui/, but ESOLua expects esoui/ with source directly inside
-          if (Test-Path "esoui\esoui") {
-            Write-Host "Restructuring ESOUI directory for ESOLua..."
-            # Save the inner esoui directory
-            $innerEsoUi = "esoui\esoui"
-            $tempEsoUi = "esoui_inner"
+          # Git clone creates esoui/esoui/ (two levels), but we flattened it incorrectly
+          # ESOLua expects esoui/ with both ingame/ and esoui/ subdirectories
+          # Current state: esoui/ has ingame/ but missing esoui/esoui/
+          # Need to check if we have esoui/esoui/esoui/ (three levels) and fix it
+          
+          if (Test-Path "esoui\esoui\esoui") {
+            Write-Host "Detected three-level nesting (esoui/esoui/esoui/), restructuring..."
+            # Move third level contents up to second level
+            $thirdLevel = "esoui\esoui\esoui"
+            $secondLevel = "esoui\esoui"
             
-            # Move inner directory to temp location
-            if (Test-Path $tempEsoUi) {
-              Remove-Item -Path $tempEsoUi -Recurse -Force -ErrorAction SilentlyContinue
+            # Copy contents from third level to second level
+            Get-ChildItem -Path $thirdLevel -Force | ForEach-Object {
+              $dest = Join-Path $secondLevel $_.Name
+              if (-not (Test-Path $dest)) {
+                Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force
+              }
             }
-            Move-Item -Path $innerEsoUi -Destination $tempEsoUi -Force
+            Write-Host "Restructured from esoui/esoui/esoui/ to esoui/esoui/"
+          }
+          
+          # Ensure esoui/esoui/ exists (ESOLua requires it)
+          if (-not (Test-Path "esoui\esoui")) {
+            Write-Host "Creating missing esoui/esoui/ directory for ESOLua..."
+            New-Item -ItemType Directory -Path "esoui\esoui" -Force | Out-Null
             
-            # Remove the outer esoui directory  
-            Remove-Item -Path "esoui" -Recurse -Force -ErrorAction SilentlyContinue
-            
-            # Move inner esoui back to root as esoui
-            Move-Item -Path $tempEsoUi -Destination "esoui" -Force
-            
-            Write-Host "ESOUI directory restructured"
+            # Copy all source directories from esoui/ to esoui/esoui/ (except esoui itself)
+            Get-ChildItem -Path "esoui" -Directory | Where-Object { $_.Name -ne "esoui" } | ForEach-Object {
+              $dest = Join-Path "esoui\esoui" $_.Name
+              Write-Host "  Copying esoui/$($_.Name) to esoui/esoui/$($_.Name)"
+              Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force
+            }
+            Write-Host "Created esoui/esoui/ structure"
           }
           
           # Verify ESOLua can find the structure it needs
           if (Test-Path "esoui\ingame") {
-            Write-Host "Verified: ESOUI structure looks correct (ingame directory found)"
+            Write-Host "Verified: esoui/ingame/ found"
           } else {
-            Write-Host "Warning: ESOUI structure verification failed"
-            if (Test-Path "esoui") {
-              Write-Host "Contents of esoui directory:"
-              Get-ChildItem -Path "esoui" -Directory | Select-Object -First 10 | ForEach-Object { Write-Host "  - $($_.Name)" }
-            }
+            Write-Host "Warning: esoui/ingame/ not found"
+          }
+          
+          if (Test-Path "esoui\esoui") {
+            Write-Host "Verified: esoui/esoui/ found"
+          } else {
+            Write-Host "ERROR: esoui/esoui/ not found - ESOLua requires this directory"
           }
           
           # Copy Taneth files (from downloaded zip or cloned repo)
