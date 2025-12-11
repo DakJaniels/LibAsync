@@ -100,9 +100,9 @@ jobs:
               Copy-Item -Path "tests" -Destination "$addonsDir\LibAsync\" -Recurse -Force
           }
           
-          # Copy ESOUI source for API definitions
+          # Copy ESOUI source for API definitions (ESOLua expects it in ./esoui)
           if (Test-Path "esoui\esoui") {
-            Copy-Item -Path "esoui\esoui" -Destination "$testDir\" -Recurse -Force
+            Copy-Item -Path "esoui\esoui" -Destination "esoui" -Recurse -Force
           }
           
           # Copy Taneth files (from downloaded zip or cloned repo)
@@ -165,7 +165,22 @@ jobs:
           _G.GetFramerate = function() return 60 end
           _G.HUD_SCENE = {IsShowing = function() return true end}
           _G.HUD_UI_SCENE = {IsShowing = function() return false end}
-          _G.ZO_InitializingCallbackObject = {New = function(self) return setmetatable({}, {__index = self}) end, Subclass = function(self) return self end}
+          -- Mock ZO_InitializingCallbackObject for class inheritance
+          local ZO_InitializingCallbackObjectBase = {
+              New = function(class)
+                  -- Create a new instance with class as metatable
+                  local instance = {}
+                  setmetatable(instance, {__index = class})
+                  return instance
+              end,
+              Subclass = function(base)
+                  -- Create a new class that inherits from base
+                  local subclass = {}
+                  setmetatable(subclass, {__index = base})
+                  return subclass
+              end
+          }
+          _G.ZO_InitializingCallbackObject = ZO_InitializingCallbackObjectBase
           _G.ZO_ClearNumericallyIndexedTable = function(t) for i = #t, 1, -1 do t[i] = nil end end
           _G.zo_callLater = function(func, ms) 
               -- Simple delayed call simulation
