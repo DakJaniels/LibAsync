@@ -101,12 +101,28 @@ jobs:
           }
           
           # Copy ESOUI source for API definitions (ESOLua expects it in ./esoui)
-          # The git clone creates esoui/esoui, we need to move its contents to root esoui
+          # The git clone creates esoui/esoui, we need the actual source files in root esoui
           if (Test-Path "esoui\esoui") {
+            Write-Host "Copying ESOUI source files..."
             # Copy all contents from esoui/esoui/* to esoui/
             Get-ChildItem -Path "esoui\esoui" -Force | ForEach-Object {
-              Copy-Item -Path $_.FullName -Destination "esoui\" -Recurse -Force
+              $dest = Join-Path "esoui" $_.Name
+              if ($_.PSIsContainer) {
+                if (-not (Test-Path $dest)) {
+                  New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                }
+              }
+              Copy-Item -Path $_.FullName -Destination "esoui\" -Recurse -Force -ErrorAction SilentlyContinue
             }
+            Write-Host "ESOUI source files copied"
+            # Verify some key files exist
+            if (Test-Path "esoui\ingame\globals.lua") {
+              Write-Host "Verified: ESOUI source files are in place"
+            } else {
+              Write-Host "Warning: Expected ESOUI files not found in esoui directory"
+            }
+          } else {
+            Write-Host "Warning: esoui\esoui directory not found"
           }
           
           # Copy Taneth files (from downloaded zip or cloned repo)
@@ -157,18 +173,25 @@ jobs:
           _G.GetFrameTimeSeconds = function() return os.clock() end
           _G.GetGameTimeSeconds = function() return os.clock() end
           _G.GetEventManager = function() 
-              local em = {updateIds = {}}
+              local em = {updateIds = {}, eventHandlers = {}}
               function em:RegisterForUpdate(id, interval, func)
                   self.updateIds[id] = {interval = interval, func = func, last = os.clock()}
               end
               function em:UnregisterForUpdate(id)
                   self.updateIds[id] = nil
               end
+              function em:RegisterForEvent(id, eventType, callback)
+                  self.eventHandlers[id] = {eventType = eventType, callback = callback}
+              end
+              function em:UnregisterForEvent(id, eventType)
+                  self.eventHandlers[id] = nil
+              end
               return em
           end
           _G.GetFramerate = function() return 60 end
           _G.HUD_SCENE = {IsShowing = function() return true end}
           _G.HUD_UI_SCENE = {IsShowing = function() return false end}
+          _G.EVENT_PLAYER_ACTIVATED = 1  -- Mock event constant
           -- Mock ZO_InitializingCallbackObject for class inheritance
           local ZO_InitializingCallbackObjectBase = {
               New = function(class)
@@ -262,7 +285,13 @@ jobs:
           }
           
           Write-Host "Running tests with ESOLua..."
-          & $esoluaExe run_tests.lua
+          # Use -s flag to specify ESOUI source path if esoui folder exists
+          if (Test-Path "esoui") {
+              Write-Host "Using ESOUI source from: $(Resolve-Path esoui)"
+              & $esoluaExe -s esoui run_tests.lua
+          } else {
+              & $esoluaExe run_tests.lua
+          }
           if ($LASTEXITCODE -ne 0) {
               Write-Host "Tests failed with exit code: $LASTEXITCODE"
               exit $LASTEXITCODE
