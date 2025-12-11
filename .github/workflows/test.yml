@@ -100,29 +100,38 @@ jobs:
               Copy-Item -Path "tests" -Destination "$addonsDir\LibAsync\" -Recurse -Force
           }
           
-          # Copy ESOUI source for API definitions (ESOLua expects it in ./esoui)
-          # The git clone creates esoui/esoui, we need the actual source files in root esoui
+          # Fix ESOUI directory structure for ESOLua
+          # Git clone creates esoui/esoui/, but ESOLua expects esoui/ with source directly inside
           if (Test-Path "esoui\esoui") {
-            Write-Host "Copying ESOUI source files..."
-            # Copy all contents from esoui/esoui/* to esoui/
-            Get-ChildItem -Path "esoui\esoui" -Force | ForEach-Object {
-              $dest = Join-Path "esoui" $_.Name
-              if ($_.PSIsContainer) {
-                if (-not (Test-Path $dest)) {
-                  New-Item -ItemType Directory -Path $dest -Force | Out-Null
-                }
-              }
-              Copy-Item -Path $_.FullName -Destination "esoui\" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Restructuring ESOUI directory for ESOLua..."
+            # Save the inner esoui directory
+            $innerEsoUi = "esoui\esoui"
+            $tempEsoUi = "esoui_inner"
+            
+            # Move inner directory to temp location
+            if (Test-Path $tempEsoUi) {
+              Remove-Item -Path $tempEsoUi -Recurse -Force -ErrorAction SilentlyContinue
             }
-            Write-Host "ESOUI source files copied"
-            # Verify some key files exist
-            if (Test-Path "esoui\ingame\globals.lua") {
-              Write-Host "Verified: ESOUI source files are in place"
-            } else {
-              Write-Host "Warning: Expected ESOUI files not found in esoui directory"
-            }
+            Move-Item -Path $innerEsoUi -Destination $tempEsoUi -Force
+            
+            # Remove the outer esoui directory  
+            Remove-Item -Path "esoui" -Recurse -Force -ErrorAction SilentlyContinue
+            
+            # Move inner esoui back to root as esoui
+            Move-Item -Path $tempEsoUi -Destination "esoui" -Force
+            
+            Write-Host "ESOUI directory restructured"
+          }
+          
+          # Verify ESOLua can find the structure it needs
+          if (Test-Path "esoui\ingame") {
+            Write-Host "Verified: ESOUI structure looks correct (ingame directory found)"
           } else {
-            Write-Host "Warning: esoui\esoui directory not found"
+            Write-Host "Warning: ESOUI structure verification failed"
+            if (Test-Path "esoui") {
+              Write-Host "Contents of esoui directory:"
+              Get-ChildItem -Path "esoui" -Directory | Select-Object -First 10 | ForEach-Object { Write-Host "  - $($_.Name)" }
+            }
           }
           
           # Copy Taneth files (from downloaded zip or cloned repo)
