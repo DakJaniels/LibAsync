@@ -220,77 +220,46 @@ jobs:
           _G.EventManager = GetEventManager()
           _G.em = GetEventManager()
           
-          -- Load Taneth
-          -- Taneth from zip needs to be loaded in the correct order
-          -- First try to load all Taneth files in order
-          local tanethBase = nil
-          local tanethFiles = {
-              "test_env/AddOns/Taneth/API.lua",
-              "test_env/AddOns/Taneth/Assertions.lua",
-              "test_env/AddOns/Taneth/StartUp.lua"
-          }
-          
-          -- Try alternative paths if files not in root
-          if not io.open(tanethFiles[1], "r") then
-              tanethFiles = {
-                  "test_env/AddOns/Taneth/Taneth/API.lua",
-                  "test_env/AddOns/Taneth/Taneth/Assertions.lua",
-                  "test_env/AddOns/Taneth/Taneth/StartUp.lua"
-              }
+          -- Load Taneth in manifest order:
+          -- 1. StartUp.lua
+          -- 2. Assertions.lua
+          -- 3. TestRunner.lua
+          -- 4. API.lua
+          local tanethBasePath = nil
+          if io.open("test_env/AddOns/Taneth/StartUp.lua", "r") then
+              tanethBasePath = "test_env/AddOns/Taneth"
+          elseif io.open("test_env/AddOns/Taneth/Taneth/StartUp.lua", "r") then
+              tanethBasePath = "test_env/AddOns/Taneth/Taneth"
           end
           
-          local tanethLoaded = false
-          for _, path in ipairs(tanethFiles) do
-              local file = io.open(path, "r")
-              if file then
-                  file:close()
-                  dofile(path)
-                  tanethLoaded = true
-              end
-          end
-          
-          -- Fallback: try single entry points
-          if not tanethLoaded then
-              local fallbackPaths = {
-                  "test_env/AddOns/Taneth/StartUp.lua",
-                  "test_env/AddOns/Taneth/Taneth/StartUp.lua",
-                  "test_env/AddOns/Taneth/run.lua",
-                  "test_env/AddOns/Taneth/Taneth.lua"
+          if tanethBasePath then
+              local tanethFiles = {
+                  "StartUp.lua",
+                  "Assertions.lua",
+                  "TestRunner.lua",
+                  "API.lua"
               }
-              for _, path in ipairs(fallbackPaths) do
-                  local file = io.open(path, "r")
-                  if file then
-                      file:close()
+              
+              for _, file in ipairs(tanethFiles) do
+                  local path = tanethBasePath .. "/" .. file
+                  local f = io.open(path, "r")
+                  if f then
+                      f:close()
                       dofile(path)
-                      tanethLoaded = true
-                      break
+                  else
+                      print("Warning: Could not load " .. path)
                   end
               end
-          end
-          
-          if not tanethLoaded then
+              print("Taneth loaded from: " .. tanethBasePath)
+          else
               error("Taneth not found in expected locations")
           end
           
-          -- Verify Taneth is callable (has __call metamethod)
-          if Taneth and type(Taneth) == "table" then
-              local mt = getmetatable(Taneth)
-              if not mt or not mt.__call then
-                  -- Make Taneth callable if it's not already
-                  if not mt then
-                      mt = {}
-                      setmetatable(Taneth, mt)
-                  end
-                  if Taneth.RegisterTestSuite then
-                      mt.__call = function(self, id, callback)
-                          return self:RegisterTestSuite(id, callback)
-                      end
-                  end
-              end
-              print("Taneth loaded and verified")
-          else
-              error("Taneth loaded but is not a table")
+          -- Verify Taneth is loaded and callable
+          if not Taneth or type(Taneth) ~= "table" then
+              error("Taneth failed to load properly")
           end
+          print("Taneth verified and ready")
           
           -- Load LibAsync
           dofile("test_env/AddOns/LibAsync/LibAsync.lua")
