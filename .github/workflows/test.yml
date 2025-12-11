@@ -315,11 +315,32 @@ jobs:
           }
           
           Write-Host "Running tests with ESOLua..."
-          # Use -s flag to specify ESOUI source path if esoui folder exists
+          
+          # Debug: Check ESOUI directory structure ESOLua expects
           if (Test-Path "esoui") {
-              Write-Host "Using ESOUI source from: $(Resolve-Path esoui)"
-              & $esoluaExe -s esoui run_tests.lua
+              Write-Host "ESOUI directory exists at: $(Resolve-Path esoui)"
+              Write-Host "Checking ESOUI structure for ESOLua..."
+              $expectedDirs = @("ingame", "esoui")
+              $structureOk = $true
+              foreach ($dir in $expectedDirs) {
+                  if (Test-Path "esoui\$dir") {
+                      Write-Host "  ✓ Found: esoui\$dir"
+                  } else {
+                      Write-Host "  ✗ Missing: esoui\$dir"
+                      $structureOk = $false
+                  }
+              }
+              
+              if (-not $structureOk) {
+                  Write-Host "Warning: ESOUI structure may be incomplete. ESOLua may fail to initialize."
+                  Write-Host "Listing esoui directory contents:"
+                  Get-ChildItem -Path "esoui" -Directory | Select-Object -First 10 | ForEach-Object { Write-Host "    $($_.Name)" }
+              }
+              
+              Write-Host "Running test script with ESOLua (ESOUI initialization may warn but script will continue with mocks)..."
+              & $esoluaExe -s esoui run_tests.lua 2>&1
           } else {
+              Write-Host "Warning: esoui directory not found, running without ESOUI initialization"
               & $esoluaExe run_tests.lua
           }
           if ($LASTEXITCODE -ne 0) {
