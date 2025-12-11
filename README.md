@@ -256,87 +256,96 @@ LibAsync includes a comprehensive test suite using the [Taneth](https://www.esou
 
 ### Running Tests In-Game
 
-1. Install the Taneth addon
-2. Load LibAsync (tests will automatically register if Taneth is available)
-3. In-game, use the following slash commands:
+1. Install the [Taneth addon](https://www.esoui.com/downloads/info2334-Taneth.html)
+2. Load LibAsync (tests automatically register if Taneth is available)
+3. Use the following slash commands in-game:
 
 ```
-/libasynctests          - Show test help
+/libasynctests          - Show test help and available commands
 /libasynctest           - Run all LibAsync tests
-/libasynctest LibAsync  - Run specific test suite
+/libasynctest LibAsync  - Run the LibAsync test suite
 ```
 
-### Running Tests Locally / CI
+### Test Suites
 
-For local development or CI/CD, you can run tests using [ESOLua](https://github.com/sirinsidiator/ESOLua) or standard Lua 5.1 with ESO API mocks:
+The test suite is organized into the following test groups:
 
-**Prerequisites:**
-- [ESOLua](https://github.com/sirinsidiator/ESOLua) (recommended) or Lua 5.1
-- [ESOUI source code](https://github.com/esoui/esoui) (for API definitions)
-- [ESO-Taneth source code](https://github.com/sirinsidiator/ESO-Taneth) (for testing framework)
+#### Basic Task Management
+- Task creation with names
+- Getting current task context
+- Basic task execution
 
-**Setup:**
-```bash
-# Clone ESOUI source
-git clone --depth 1 --branch live https://github.com/esoui/esoui.git
+#### Sequential Tasks
+- Chaining tasks with `Call` and `Then`
+- Nested `Call`/`Then` operations
+- Task sequencing and dependencies
 
-# Clone Taneth source
-git clone --depth 1 https://github.com/sirinsidiator/ESO-Taneth.git taneth
+#### Loop Tasks
+- Numeric `For` loops (with and without step)
+- `pairs` iteration over tables
+- `ipairs` iteration over arrays
+- `While` loops with conditions
+- Breaking loops with `LibAsync.BREAK`
 
-# Download ESOLua (pre-built release)
-# Option 1: Download from ESOUI
-# https://www.esoui.com/downloads/info3583-ESOLua.html
-# Extract esolua.exe to a directory on your PATH
+#### Delay Tasks
+- `Delay` execution with timeouts
+- `ThenDelay` chaining with delays
+- Timing validation
 
-# Option 2: Build from source (requires MinGW)
-# git clone https://github.com/sirinsidiator/ESOLua.git
-# cd ESOLua
-# build.bat
-```
+#### WaitUntil Tasks
+- Conditional waiting for conditions
+- Polling until conditions are met
 
-**Run tests:**
-```bash
-# With ESOLua (recommended)
-esolua scripts/run_tests.lua
+#### Error Handling
+- `OnError` callback execution
+- `Finally` block execution on success
+- `Finally` block execution on error
+- `Finally` block execution on cancel
 
-# Or using Taneth.bat (if esolua.exe is on PATH)
-# See https://github.com/sirinsidiator/ESO-Taneth for details
+#### Task Control
+- Resuming suspended tasks
+- Canceling tasks
+- Task state management
 
-# Or with standard Lua 5.1 (with API mocks)
-lua5.1 scripts/run_tests.lua
-```
+#### Sorting
+- Array sorting with default comparison
+- Array sorting with custom comparators
+- Sorting large arrays asynchronously
 
-**GitHub Actions:** Tests automatically run on push/PR using the workflow in `.github/workflows/test.yml`. The workflow:
-- Clones [ESOUI source](https://github.com/esoui/esoui) for API definitions
-- Clones [ESO-Taneth source](https://github.com/sirinsidiator/ESO-Taneth) for the testing framework
-- Downloads or builds [ESOLua](https://github.com/sirinsidiator/ESOLua)
-- Sets up test environment with proper directory structure
-- Runs the full test suite using Taneth
+#### Async Static Methods
+- Task instance operations
+- Default task behavior validation
 
-### Test Coverage
+#### Nested Tasks and Complex Scenarios
+- Deeply nested task structures
+- Loops within tasks
+- Delays within loops
+- Complex async workflows
 
-The test suite covers:
+#### Edge Cases
+- Empty tasks
+- Zero delay handling
+- Multiple resume calls
+- Canceling non-existent tasks
+- Boundary conditions
 
-- **Basic Task Management**: Task creation, execution, and context
-- **Sequential Tasks**: Call/Then chaining, nested operations
-- **Loop Tasks**: For loops (numeric, pairs, ipairs), While loops, breaking
-- **Delay Tasks**: Delay and ThenDelay functionality
-- **WaitUntil Tasks**: Conditional waiting
-- **Error Handling**: OnError and Finally blocks
-- **Task Control**: Resume, Suspend, Cancel operations
-- **Sorting**: Array sorting with custom comparators
-- **Async Static Methods**: Default task operations
-- **Complex Scenarios**: Nested tasks, loops within tasks, error recovery
-- **Edge Cases**: Empty tasks, multiple operations, boundary conditions
-- **Integration Tests**: Complex workflows and error recovery scenarios
+#### Debug and Utility Functions
+- Debug state management (`SetDebug`/`GetDebug`)
+- Log to chat state (`SetLogToChat`/`GetLogToChat`)
+- CPU load monitoring (`GetCpuLoad`)
+
+#### Integration Tests
+- Complex async workflows with multiple steps
+- Error recovery in complex workflows
+- Real-world usage scenarios
 
 ### Writing Tests
 
-Tests use the Taneth BDD-style syntax. For async operations, use `it.async` and call `done()` when complete:
+Tests use Taneth's BDD-style syntax. For async operations, use `it.async` and call `done()` when the test completes:
 
 ```lua
 describe("Feature Name", function()
-    it("should do something", function()
+    it("should do something synchronously", function()
         -- Synchronous test code
         assert.is_true(condition)
     end)
@@ -347,13 +356,17 @@ describe("Feature Name", function()
             -- Do async work
         end):Finally(function()
             assert.equals(expected, actual)
-            done()
+            done() -- Signal test completion
         end)
     end)
 end)
 ```
 
-**Note**: Always use `:Finally()` or proper async waiting mechanisms in async tests to ensure operations complete before assertions.
+**Important Notes:**
+- Always use `:Finally()` or proper async waiting mechanisms in async tests to ensure operations complete before assertions
+- Use `done()` callback to signal when async tests are complete
+- Test delays use shorter timeouts (5-10ms) for faster test execution
+- Tests automatically restore original state for debug/log settings
 
 ## Best Practices
 
