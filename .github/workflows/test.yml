@@ -101,8 +101,12 @@ jobs:
           }
           
           # Copy ESOUI source for API definitions (ESOLua expects it in ./esoui)
+          # The git clone creates esoui/esoui, we need to move its contents to root esoui
           if (Test-Path "esoui\esoui") {
-            Copy-Item -Path "esoui\esoui" -Destination "esoui" -Recurse -Force
+            # Copy all contents from esoui/esoui/* to esoui/
+            Get-ChildItem -Path "esoui\esoui" -Force | ForEach-Object {
+              Copy-Item -Path $_.FullName -Destination "esoui\" -Recurse -Force
+            }
           }
           
           # Copy Taneth files (from downloaded zip or cloned repo)
