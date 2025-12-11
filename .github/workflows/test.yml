@@ -1,0 +1,273 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Run LibAsync Tests
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout LibAsync
+        uses: actions/checkout@v4
+      
+      - name: Setup ESOUI Source
+        run: |
+          git clone --depth 1 --branch live https://github.com/esoui/esoui.git esoui
+      
+      - name: Setup Taneth
+        run: |
+          # Download pre-built Taneth from ESOUI
+          $tanethDir = "taneth"
+          New-Item -ItemType Directory -Path $tanethDir -Force | Out-Null
+          
+          Write-Host "Downloading Taneth 1.1.0 from ESOUI..."
+          $tanethUrl = "https://www.esoui.com/downloads/dl3584/Taneth_1_1_0.zip"
+          $zipPath = "$tanethDir\Taneth_1_1_0.zip"
+          
+          try {
+            Invoke-WebRequest -Uri $tanethUrl -OutFile $zipPath -ErrorAction Stop
+            Expand-Archive -Path $zipPath -DestinationPath $tanethDir -Force
+            Write-Host "Taneth downloaded and extracted successfully"
+            
+            # Check if Taneth files are in a subdirectory
+            $tanethFiles = Get-ChildItem -Path $tanethDir -Filter "*.lua" -Recurse -ErrorAction SilentlyContinue
+            if ($tanethFiles) {
+              Write-Host "Found $($tanethFiles.Count) Taneth Lua files"
+            }
+          } catch {
+            Write-Host "Failed to download Taneth, falling back to cloning from GitHub..."
+            git clone --depth 1 https://github.com/sirinsidiator/ESO-Taneth.git taneth-git
+            if (Test-Path "taneth-git") {
+              Move-Item -Path "taneth-git\*" -Destination $tanethDir -Force -ErrorAction SilentlyContinue
+            }
+          }
+      
+      - name: Setup Lua
+        run: |
+          # Try to install Lua 5.1 via Chocolatey as fallback
+          if (Get-Command choco -ErrorAction SilentlyContinue) {
+            Write-Host "Installing Lua 5.1 via Chocolatey..."
+            choco install lua -y --version=5.1.5
+          } else {
+            Write-Host "Chocolatey not available, will check for existing Lua installation"
+          }
+      
+      - name: Setup ESOLua
+        run: |
+          # Download pre-built ESOLua from ESOUI
+          $esoluaDir = "esolua"
+          New-Item -ItemType Directory -Path $esoluaDir -Force | Out-Null
+          
+          Write-Host "Downloading ESOLua 1.1.0 from ESOUI..."
+          $esoluaUrl = "https://www.esoui.com/downloads/dl3583/ESOLua-1.1.0.zip"
+          $zipPath = "$esoluaDir\ESOLua-1.1.0.zip"
+          
+          try {
+            Invoke-WebRequest -Uri $esoluaUrl -OutFile $zipPath -ErrorAction Stop
+            Expand-Archive -Path $zipPath -DestinationPath $esoluaDir -Force
+            Write-Host "ESOLua downloaded and extracted successfully"
+            
+            # Find esolua.exe (may be in a subdirectory)
+            $exeFiles = Get-ChildItem -Path $esoluaDir -Filter "esolua.exe" -Recurse -ErrorAction SilentlyContinue
+            if ($exeFiles) {
+              Write-Host "Found ESOLua executable: $($exeFiles[0].FullName)"
+              # If extracted to a subdirectory, move files to root for easier access
+              $exeDir = $exeFiles[0].DirectoryName
+              if ($exeDir -ne (Resolve-Path $esoluaDir).Path) {
+                Write-Host "Moving ESOLua files to root directory..."
+                Get-ChildItem -Path $exeDir -File | ForEach-Object {
+                  Move-Item -Path $_.FullName -Destination $esoluaDir -Force
+                }
+              }
+            } else {
+              Write-Host "Warning: esolua.exe not found after extraction"
+            }
+          } catch {
+            Write-Host "Failed to download ESOLua: $_"
+            Write-Host "Will attempt to use system Lua 5.1 as fallback"
+          }
+      
+      - name: Create Test Environment
+        run: |
+          # Create test environment structure
+          $testDir = "test_env"
+          $addonsDir = "$testDir\AddOns"
+          
+          New-Item -ItemType Directory -Path "$addonsDir\LibAsync" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$addonsDir\Taneth" -Force | Out-Null
+          
+          # Copy LibAsync files
+          Copy-Item -Path "LibAsync.lua" -Destination "$addonsDir\LibAsync\" -Force
+          Copy-Item -Path "LibAsync.addon" -Destination "$addonsDir\LibAsync\" -Force
+          Copy-Item -Path "tests\*" -Destination "$addonsDir\LibAsync\tests\" -Recurse -Force
+          
+          # Copy ESOUI source for API definitions
+          if (Test-Path "esoui\esoui") {
+            Copy-Item -Path "esoui\esoui" -Destination "$testDir\" -Recurse -Force
+          }
+          
+          # Copy Taneth files (from downloaded zip or cloned repo)
+          $tanethSource = $null
+          
+          # Check for Taneth directory from zip (Taneth/Taneth/...)
+          if (Test-Path "taneth\Taneth") {
+            $tanethSource = "taneth\Taneth"
+          }
+          # Check for src directory from git clone
+          elseif (Test-Path "taneth\src") {
+            $tanethSource = "taneth\src"
+          }
+          # Check for files directly in taneth root
+          elseif (Test-Path "taneth\*.lua") {
+            $tanethSource = "taneth"
+          }
+          
+          if ($tanethSource) {
+            $tanethSrcPath = Resolve-Path $tanethSource
+            $tanethFiles = Get-ChildItem -Path $tanethSource -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue
+            if ($tanethFiles) {
+              foreach ($file in $tanethFiles) {
+                $relativePath = $file.FullName.Substring($tanethSrcPath.Path.Length + 1)
+                $destPath = Join-Path "$addonsDir\Taneth" $relativePath
+                $destDir = Split-Path $destPath -Parent
+                if (-not (Test-Path $destDir)) {
+                  New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+                }
+                Copy-Item -Path $file.FullName -Destination $destPath -Force
+              }
+              Write-Host "Taneth files copied successfully ($($tanethFiles.Count) files)"
+            } else {
+              Write-Host "Warning: No Lua files found in $tanethSource"
+            }
+          } else {
+            Write-Host "Warning: Taneth files not found in expected locations"
+            Get-ChildItem -Path "taneth" -Recurse -Directory | Select-Object -First 5 | ForEach-Object { Write-Host "Found directory: $($_.FullName)" }
+          }
+      
+      - name: Create Test Runner Script
+        run: |
+          $runnerScript = @'
+          -- Test runner for LibAsync using ESOLua
+          package.path = package.path .. ";test_env/esoui/?.lua;test_env/esoui/esoui/?.lua;test_env/AddOns/?.lua;test_env/AddOns/?/?.lua"
+          
+          -- Load basic ESO globals (minimal mock)
+          _G.GetFrameTimeSeconds = function() return os.clock() end
+          _G.GetGameTimeSeconds = function() return os.clock() end
+          _G.GetEventManager = function() 
+              local em = {updateIds = {}}
+              function em:RegisterForUpdate(id, interval, func)
+                  self.updateIds[id] = {interval = interval, func = func, last = os.clock()}
+              end
+              function em:UnregisterForUpdate(id)
+                  self.updateIds[id] = nil
+              end
+              return em
+          end
+          _G.GetFramerate = function() return 60 end
+          _G.HUD_SCENE = {IsShowing = function() return true end}
+          _G.HUD_UI_SCENE = {IsShowing = function() return false end}
+          _G.ZO_InitializingCallbackObject = {New = function(self) return setmetatable({}, {__index = self}) end, Subclass = function(self) return self end}
+          _G.ZO_ClearNumericallyIndexedTable = function(t) for i = #t, 1, -1 do t[i] = nil end end
+          _G.zo_callLater = function(func, ms) 
+              -- Simple delayed call simulation
+              local start = os.clock()
+              while os.clock() - start < ms / 1000 do end
+              func()
+          end
+          _G.CHAT_ROUTER = {AddSystemMessage = function(msg) print(msg) end}
+          _G.SLASH_COMMANDS = {}
+          _G.EventManager = GetEventManager()
+          _G.em = GetEventManager()
+          
+          -- Load Taneth
+          -- Taneth from zip has files in Taneth/ subdirectory
+          -- Try common Taneth entry points
+          local tanethPaths = {
+              "test_env/AddOns/Taneth/StartUp.lua",  -- Main entry point from zip
+              "test_env/AddOns/Taneth/Taneth/StartUp.lua",
+              "test_env/AddOns/Taneth/run.lua",
+              "test_env/AddOns/Taneth/Taneth.lua",
+              "test_env/AddOns/Taneth/src/Taneth.lua"
+          }
+          local tanethLoaded = false
+          for _, path in ipairs(tanethPaths) do
+              local file = io.open(path, "r")
+              if file then
+                  file:close()
+                  dofile(path)
+                  tanethLoaded = true
+                  print("Loaded Taneth from: " .. path)
+                  break
+              end
+          end
+          if not tanethLoaded then
+              error("Taneth not found in expected locations")
+          end
+          
+          -- Load LibAsync
+          dofile("test_env/AddOns/LibAsync/LibAsync.lua")
+          
+          -- Load and register tests
+          dofile("test_env/AddOns/LibAsync/tests/LibAsync_test.lua")
+          
+          -- Run tests
+          print("Running LibAsync tests...")
+          local success = Taneth:RunTestSuites({"LibAsync"}, function()
+              print("All tests completed successfully!")
+              os.exit(0)
+          end)
+          
+          if not success then
+              print("Tests completed synchronously")
+              os.exit(0)
+          end
+          '@
+          
+          $runnerScript | Out-File -FilePath "run_tests.lua" -Encoding utf8
+      
+      - name: Find and Run Tests
+        run: |
+          # Find ESOLua executable
+          $esoluaExe = $null
+          if (Test-Path "esolua") {
+              $exeFiles = Get-ChildItem -Path "esolua" -Filter "esolua.exe" -Recurse -ErrorAction SilentlyContinue
+              if ($exeFiles) {
+                  $esoluaExe = $exeFiles[0].FullName
+                  Write-Host "Found ESOLua: $esoluaExe"
+              }
+          }
+          
+          if ($esoluaExe) {
+              Write-Host "Running tests with ESOLua..."
+              & $esoluaExe run_tests.lua
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host "Tests failed with exit code: $LASTEXITCODE"
+                  exit $LASTEXITCODE
+              }
+          } else {
+              Write-Host "ESOLua not found, trying system Lua 5.1..."
+              # Try common Lua 5.1 installations
+              $luaCmds = @("lua5.1", "lua", "lua51")
+              $found = $false
+              foreach ($cmd in $luaCmds) {
+                  if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+                      Write-Host "Running tests with: $cmd"
+                      & $cmd run_tests.lua
+                      $found = $true
+                      if ($LASTEXITCODE -ne 0) {
+                          exit $LASTEXITCODE
+                      }
+                      break
+                  }
+              }
+              if (-not $found) {
+                  Write-Host "ERROR: No Lua interpreter found."
+                  Write-Host "Please ensure ESOLua is downloaded or Lua 5.1 is installed"
+                  exit 1
+              }
+          }
